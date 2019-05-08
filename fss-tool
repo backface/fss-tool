@@ -134,7 +134,8 @@ if __name__ == '__main__':
 			top = "./"
 			os.chdir(indir)
 		else:
-			top = indir
+			os.chdir(os.path.join(indir,".."))
+			top = os.path.basename(indir)
 
 		
 		target_dir = os.path.join(dokuwiki, media_dir, archive_dir, outdir)
