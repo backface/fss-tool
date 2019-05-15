@@ -1,6 +1,6 @@
 
 =================================================
-Admin script for STWST-FSS / Foto Sammel Server 
+Admin script in progress for STWST-FSS 
 =================================================
 
 Author:(c) Michael Aschauer <m AT ash.to>

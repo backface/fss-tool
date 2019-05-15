@@ -192,18 +192,18 @@ if __name__ == '__main__':
 		target_dir = os.path.join(dokuwiki, pages_dir, dir_to_sync)
 
 		# create sidebar.txt one level up
-		outfile = os.path.join(target_dir, "..","sidebar") + ".txt"
-		print("creating file: {}".format(outfile))
-		os.makedirs(os.path.split(outfile)[0], exist_ok=True)
-		f = open(outfile,"w")
-		f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
+		#outfile = os.path.join(target_dir, "..","sidebar") + ".txt"
+		##print("creating file: {}".format(outfile))
+		#os.makedirs(os.path.split(outfile)[0], exist_ok=True)
+		#f = open(outfile,"w")
+		#f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
 
-		for i in os.listdir(os.path.join(source_dir, "..")):
-			if os.path.isdir(os.path.join(source_dir, "..", i)) and i[0] != ".":
-				f.write('[[/{}/|{{{{icon>folder}}}}]][[/{}/|{}]]  \n'.format(
-					os.path.join(dir_to_sync,i), os.path.join(dir_to_sync,i), i))
-		f.close()
-		os.chown(outfile, UID, GID)
+		##for i in os.listdir(os.path.join(source_dir, "..")):
+		#	if os.path.isdir(os.path.join(source_dir, "..", i)) and i[0] != ".":
+		#		f.write('[[/{}/|{{{{icon>folder}}}}]][[/{}/|{}]]  \n'.format(
+		#			os.path.join(dir_to_sync,"..", i), os.path.join(dir_to_sync, "..", i), i))
+		#f.close()
+		#os.chown(outfile, UID, GID)
 		
 		# create sidebar.txt file in top level
 		outfile = os.path.join(target_dir, "sidebar") + ".txt"
