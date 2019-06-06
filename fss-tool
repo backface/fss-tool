@@ -13,116 +13,140 @@ import os
 import getopt
 from shutil import copyfile
 from slugify import slugify
+from subprocess import call
 
 dokuwiki = "/var/www/html/farm/fss"
 media_dir = "data/media/"
 pages_dir = "data/pages/"
 archive_dir = "foto/archived"
 publish_dir = "foto/published"
+extensions = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif",]
 
-outdir = ""
-indir = "./"
-UID = 33
-GID = 33
-counter = 0
+	outdir = ""
+	indir = "./"
+	UID = 33
+	GID = 33
+	counter = 0
 
-syncPages = False
-syncTags = False
-importFiles = False
+	syncPages = False
+	syncTags = False
+	importFiles = False
 
-dir_to_sync = ""
-
-
-def usage():
-	print("""
-
-usage: fss-tool [options] -i INPUT-DIR [-o OUTPUT-DIR]
-
-OPTIONS:
-========
-	-h, --help              print usage
-	-i, --input=DIR         input directory (interpreted depending on action)
-	-o, --output=DIR        output directory (interpreted depending on action)
+	dir_to_sync = ""
 
 
-	actions:
-	--import                import into FSS
-	--sync-pages            sync dokuwiki's page structure to image files
-	--sync-tags             NOT YET: sync exif/iptc/xmp tags
+	def usage():
+		print("""
 
-	fss directories overrides
+	usage: fss-tool [options] -i INPUT-DIR [-o OUTPUT-DIR]
 
-	--dokuwiki-dir=DIR      DOKUWIKI Directory (default: "/var/www/html/farm/fss/")
-	--archive-dir=DIR       Archive Directory (default: "foto/archived")
-	--publish-dir=DIR       Archive Directory (default: "foto/published")
-
-EXAMPLES:
-=========
-
-	Import files from current directory into directory "fx"
-
-		fss-tool --import -o fx
-
-	Import files from a directory
-
-		fss-tool --import -i /home/data/ritter_archive/
-
-	Import
-		fss-tool --import -i /home/data/ritter_archive/ -o gr
-
-	Sync media structure to pages
-
-		fss-tool --sync-pages
-
-	Sync wiki's page structure for directory "fx"
-
-		fss-tool --sync-pages -i fx
-""")
+	OPTIONS:
+	========
+		-h, --help              print usage
+		-i, --input=DIR         input directory (interpreted depending on action)
+		-o, --output=DIR        output directory (interpreted depending on action)
 
 
-def process_args():
-	global indir, outdir, dokuwiki, arrchive_dir, publish_dir
-	global importFiles, syncTags, syncPages
+		actions:
+		--import                import into FSS
+		--sync-pages            sync dokuwiki's page structure to image files
+		--sync-tags             NOT YET: sync exif/iptc/xmp tags
 
-	try:
-		opts, args = getopt.getopt(sys.argv[1:], "hi:o:",
-			["help", "input=","output=",
-				"import", "sync-pages", "sync-tags",
-				"publish-dir=", "archive-dir=", "dokuwiki-dir=" ])
-	except getopt.GetoptError as err:
-		print(str(err)) # will print something like "option -a not recognized"
-		usage()
-		sys.exit(2)
+		fss directories overrides
 
-	for o, a in opts:
-		if o in ("-h", "--help"):
+		--dokuwiki-dir=DIR      DOKUWIKI Directory (default: "/var/www/html/farm/fss/")
+		--archive-dir=DIR       Archive Directory (default: "foto/archived")
+		--publish-dir=DIR       Archive Directory (default: "foto/published")
+
+	EXAMPLES:
+	=========
+
+		Import files from current directory into directory "fx"
+
+			fss-tool --import -o fx
+
+		Import files from a directory
+
+			fss-tool --import -i /home/data/ritter_archive/
+
+		Import
+			fss-tool --import -i /home/data/ritter_archive/ -o gr
+
+		Sync media structure to pages
+
+			fss-tool --sync-pages
+
+		Sync wiki's page structure for directory "fx"
+
+			fss-tool --sync-pages -i fx
+	""")
+
+
+	def process_args():
+		global indir, outdir, dokuwiki, arrchive_dir, publish_dir
+		global importFiles, syncTags, syncPages
+
+		try:
+			opts, args = getopt.getopt(sys.argv[1:], "hi:o:",
+				["help", "input=","output=",
+					"import", "sync-pages", "sync-tags",
+					"publish-dir=", "archive-dir=", "dokuwiki-dir=" ])
+		except getopt.GetoptError as err:
+			print(str(err)) # will print something like "option -a not recognized"
 			usage()
-			sys.exit()
-		elif o in ("-o", "--outdir"):
-			outdir = a
-		elif o in ("-i", "--indir"):
-			indir = a
-		elif o in ("--dokuwiki-dir"):
-			dokuwiki = a
-		elif o in ("--archive-dir"):
-			archive_dir = a
-		elif o in ("--publish-dir"):
-			publish_dir = a
-		elif o in ("--sync-tags"):
-			syncTags = True
-		elif o in ("--sync-pages"):
-			syncPages = True
-		elif o in ("--import"):
-			importFiles = True
-		else:
-			usage();
-			sys.exit()
+			sys.exit(2)
 
-	if len(sys.argv) <= 1:
-		print("options required.")
-		print("see help")
-		sys.exit(2)
+		for o, a in opts:
+			if o in ("-h", "--help"):
+				usage()
+				sys.exit()
+			elif o in ("-o", "--outdir"):
+				outdir = a
+			elif o in ("-i", "--indir"):
+				indir = a
+			elif o in ("--dokuwiki-dir"):
+				dokuwiki = a
+			elif o in ("--archive-dir"):
+				archive_dir = a
+			elif o in ("--publish-dir"):
+				publish_dir = a
+			elif o in ("--sync-tags"):
+				syncTags = True
+			elif o in ("--sync-pages"):
+				syncPages = True
+			elif o in ("--import"):
+				importFiles = True
+			else:
+				usage();
+				sys.exit()
 
+		if len(sys.argv) <= 1:
+			print("options required.")
+			print("see help")
+			sys.exit(2)
+			
+
+	def sync_tags(d):
+		title_tags = ["iptc:Headline", "xmp:title"]
+		descr_tags = ["iptc:Caption","exif:ImageDescription","exif:TIFFImageDescription", "exif:UserComment","exif:TIFFUserComment"]
+		authr_tags = ["iptc:Byline","exif:Artis","exif:TIFFArtist","iptc:Credit"]
+		copyr_tags = ["iptc:CopyrightNotice","exif:Copyright","exif:TIFFCopyright"]
+		keywd_tags = ["iptc:Keywords","exif:Category"]
+		#date_tags = 
+		
+		def repair_tags(f):
+			call("exiftool -all= -tagsfromfile @ -all:all -unsafe -icc_profile "+ f)
+
+
+		for root, subdirs, files in os.walk(d):
+			for f in files:
+				filename, ext = os.path.splitext(f)
+				ext = ext.lower()
+
+			if ext in extensions:
+				print(f)
+	
+	
 
 if __name__ == '__main__':
 	process_args()
@@ -158,7 +182,7 @@ if __name__ == '__main__':
 				original = os.path.join(root, f)
 				target = os.path.join(folder, filename)
 
-				if not ext in [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif",]:
+				if not ext in extensions:
 					sys.stdout.write("\033[1;31m")
 					print("ignore {}".format(original.encode("utf-8", "surrogateescape")))
 				else:
@@ -251,3 +275,6 @@ if __name__ == '__main__':
 					f.close()
 
 					os.chown(outfile, UID, GID)
+					
+	if syncTags:
+		sync_tags(indir)
