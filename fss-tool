@@ -135,14 +135,30 @@ def process_args():
 def sync_tags(d):
 
 	tags = {
-		"title": ["Iptc.Application2.Headline", "xmp:title"],
-		"description": ["Iptc.Application2.Caption","Exif.Image.ImageDescription","Exif.Image.TIFFImageDescription", "Exif.Photo.UserComment","Exif.Photo.TIFFUserComment"],
-		"author" : ["Iptc.Application2.Byline","Exif.Image.Artis","Exif.Image.TIFFArtist","Ipfc.Application2.Credit"], 
-		"copyright" : ["Iptc.Application2.Copyright","Exif.Copyright","Exif.Image.TIFFCopyright"], 
-		"keywords" :  ["Iptc.Application2.Keywords","Exif.Image.Category"],
-		"date": ["Iptc.Application2.DateCreated", "Exif.Photo.DateTime", "Exif.Photo.DateTimeOriginal","Exif.Photo.DateTimeDigitized", "Exif.TIFFDateTime"]
+		"title": [
+			"Iptc.Application2.Headline", 
+			],
+		"description": [
+			"Iptc.Application2.Caption",
+			"Exif.Image.ImageDescription","Exif.Image.TIFFImageDescription", "Exif.Photo.UserComment","Exif.Photo.TIFFUserComment", 
+			],
+		"author" : [
+			"Iptc.Application2.Byline", "Iptc.Application2.Credit",
+			"Exif.Image.Artis","Exif.Image.TIFFArtist",
+			], 
+		"copyright" : [
+			"Iptc.Application2.Copyright",
+			"Exif.Copyright","Exif.Image.TIFFCopyright",
+			], 
+		"keywords" :  [
+			"Iptc.Application2.Keywords",
+			"Exif.Image.Category"],
+		"date": [
+			"Iptc.Application2.DateCreated", 
+			"Exif.Photo.DateTime", "Exif.Photo.DateTimeOriginal","Exif.Photo.DateTimeDigitized", "Exif.TIFFDateTime", 
+			]
 	}
-	
+
 	files_with_errors = []
 	
 	def repair_tags(f):
