@@ -22,16 +22,17 @@ from termcolor import colored
 EXIF_BIN = "/usr/bin/exiftool"
 UID = 33
 GID = 33
+EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif",]
+
 
 dokuwiki = "/var/www/html/farm/fss"
 media_dir = "data/media/"
 pages_dir = "data/pages/"
 archive_dir = "foto/archived"
 publish_dir = "foto/published"
-EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif",]
-
 outdir = ""
 indir = "./"
+verbose = True
 
 syncPages = False
 syncTags = False
@@ -142,6 +143,8 @@ def sync_tags(d):
 		"date": ["Iptc.Application2.DateCreated", "Exif.Photo.DateTime", "Exif.Photo.DateTimeOriginal","Exif.Photo.DateTimeDigitized", "Exif.TIFFDateTime"]
 	}
 	
+	files_with_errors = []
+	
 	def repair_tags(f):
 		call(EXIF_BIN, "-all= -tagsfromfile @ -all:all -unsafe -icc_profile ".format(f))	
 
@@ -155,6 +158,8 @@ def sync_tags(d):
 				metadata = pyexiv2.ImageMetadata(os.path.join(root,f))
 				metadata.read()
 				
+				
+				
 				# get available keys
 				keys = metadata.iptc_keys
 				for k in metadata.exif_keys:
@@ -163,8 +168,7 @@ def sync_tags(d):
 				# debug: print all keys
 				#print("\n{}\n".format(keys))
 				
-				print("{}".format(os.path.join(root,f)))
-				print("===================\n")
+				
 				
 				# now process tags
 				for tag in tags:
@@ -186,6 +190,7 @@ def sync_tags(d):
 									tag_values.append(metadata[t].raw_value[0])
 									
 									if metadata[t].repeatable and len(metadata[t].raw_value) > 1:
+										print("{}".format(os.path.join(root,f)))
 										print(colored("  {} is repeatable and has {} values".format(t, len(metadata[t].raw_value)), "red", attrs=["bold"]))
 										print("\n")
 							else:
@@ -196,9 +201,11 @@ def sync_tags(d):
 									
 								
 					if len(tag_values) > 1:
-						print(colored("  multiple tags for {}".format(tag.upper()), "magenta", attrs=["bold"]))
-						print("  {}".format(tag_names))
-						print("\n")
+						if (verbose):
+							print("{}".format(os.path.join(root,f)))
+							print(colored("  multiple tags for {}".format(tag.upper()), "magenta", attrs=["bold"]))
+							print("  {}".format(tag_names))
+							print("\n")
 					
 						# set all datetimes to dates
 						if tag == "date":
@@ -209,28 +216,43 @@ def sync_tags(d):
 						# has mismatching tag values						
 						if len(set(tag_values)) > 1:
 							tag_differ = True
+							files_with_errors.append(os.path.join(root,f))
 								
-						
 					# has mismatching tag values	
 					if tag_differ:	
+						print("{}".format(os.path.join(root,f)))
 						print(colored("  tag mismatch for {}".format(tag.upper()), "red", attrs=["bold"]))
 						print("  ----------------------")
 						for i, t in enumerate(tag_names):
 							print(colored("    {}:".format(t), "yellow", attrs=["bold"]))
 							print("      {}:".format(tag_values[i]))
 						print("  ----------------------")
-						print(colored("    {} tags for {}".format(tag_counter, tag), "red", attrs=["bold"]))
+						print(colored("   {} mismatching tags for {}".format(tag_counter, tag), "red", attrs=["bold"]))
 						print("\n")
+						
+						
 						
 					else:
 						if len(tag_values) > 0:
 							
 							# write IPTC tag if no set
 							if not tags[tag][0] in keys:
-								print(colored("  setting {} to {}".format(tags[tag][0], tag_names[0]), "cyan", attrs=["bold"]))
-								print("\n")
+								if (verbose):
+									print("{}".format(os.path.join(root,f)))
+									print(colored("  setting {} to {}".format(tags[tag][0], tag_names[0]), "cyan", attrs=["bold"]))
+									print("\n")
 								metadata[tags[tag][0]] = [tag_values[0]]
 								metadata.write()
+	
+	
+	if len(files_with_errors) > 0:
+		f = open("errors.txt","w")
+		for name in files_with_errors:
+			f.write('{}\n'.format(name))
+		f.close()
+		
+		print("found {} files with multiple tags with mismatching values".format(len(files_with_errors)))
+		print("See errors.txt for a list of these files")
 
 if __name__ == '__main__':
 	process_args()
