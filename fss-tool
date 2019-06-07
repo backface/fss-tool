@@ -163,7 +163,8 @@ def sync_tags(d):
 				# debug: print all keys
 				#print("\n{}\n".format(keys))
 				
-				print("{}\n".format(os.path.join(root,f)))
+				print("{}".format(os.path.join(root,f)))
+				print("===================\n")
 				
 				# now process tags
 				for tag in tags:
@@ -226,7 +227,7 @@ def sync_tags(d):
 							
 							# write IPTC tag if no set
 							if not tags[tag][0] in keys:
-								print(colored("\nsetting {} to {}".format(tags[tag][0], tag_names[0]), "cyan", attrs=["bold"]))
+								print(colored("  setting {} to {}".format(tags[tag][0], tag_names[0]), "cyan", attrs=["bold"]))
 								print("\n")
 								metadata[tags[tag][0]] = [tag_values[0]]
 								metadata.write()
