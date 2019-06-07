@@ -11,29 +11,34 @@ see: http://www.gnu.org/licenses/gpl.html
 import sys
 import os
 import getopt
+import datetime
 from shutil import copyfile
 from slugify import slugify
+import pyexiv2
 from subprocess import call
+from termcolor import colored
+
+
+EXIF_BIN = "/usr/bin/exiftool"
+UID = 33
+GID = 33
 
 dokuwiki = "/var/www/html/farm/fss"
 media_dir = "data/media/"
 pages_dir = "data/pages/"
 archive_dir = "foto/archived"
 publish_dir = "foto/published"
-extensions = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif",]
+EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif",]
 
 outdir = ""
 indir = "./"
-UID = 33
-GID = 33
-counter = 0
 
 syncPages = False
 syncTags = False
 importFiles = False
 
 dir_to_sync = ""
-
+counter = 0
 
 def usage():
 	print("""
@@ -127,26 +132,104 @@ def process_args():
 		
 
 def sync_tags(d):
-	title_tags = ["iptc:Headline", "xmp:title"]
-	descr_tags = ["iptc:Caption","exif:ImageDescription","exif:TIFFImageDescription", "exif:UserComment","exif:TIFFUserComment"]
-	authr_tags = ["iptc:Byline","exif:Artis","exif:TIFFArtist","iptc:Credit"]
-	copyr_tags = ["iptc:CopyrightNotice","exif:Copyright","exif:TIFFCopyright"]
-	keywd_tags = ["iptc:Keywords","exif:Category"]
-	#date_tags = 
+
+	tags = {
+		"title": ["Iptc.Application2.Headline", "xmp:title"],
+		"description": ["Iptc.Application2.Caption","Exif.Image.ImageDescription","Exif.Image.TIFFImageDescription", "Exif.Photo.UserComment","Exif.Photo.TIFFUserComment"],
+		"author" : ["Iptc.Application2.Byline","Exif.Image.Artis","Exif.Image.TIFFArtist","Ipfc.Application2.Credit"], 
+		"copyright" : ["Iptc.Application2.Copyright","Exif.Copyright","Exif.Image.TIFFCopyright"], 
+		"keywords" :  ["Iptc.Application2.Keywords","Exif.Image.Category"],
+		"date": ["Iptc.Application2.DateCreated", "Exif.Photo.DateTime", "Exif.Photo.DateTimeOriginal","Exif.Photo.DateTimeDigitized", "Exif.TIFFDateTime"]
+	}
 	
 	def repair_tags(f):
-		call("exiftool -all= -tagsfromfile @ -all:all -unsafe -icc_profile "+ f)
+		call(EXIF_BIN, "-all= -tagsfromfile @ -all:all -unsafe -icc_profile ".format(f))	
 
-
-	for root, subdirs, files in os.walk(d):
+	for root, subdirs, files in os.walk(d):		
 		for f in files:
 			filename, ext = os.path.splitext(f)
 			ext = ext.lower()
 
-			if ext in extensions:
-				print(f)
-	
-	
+			if ext in EXTENSIONS:
+
+				metadata = pyexiv2.ImageMetadata(os.path.join(root,f))
+				metadata.read()
+				
+				# get available keys
+				keys = metadata.iptc_keys
+				for k in metadata.exif_keys:
+					keys.append(k)
+				
+				# debug: print all keys
+				#print("\n{}\n".format(keys))
+				
+				print("{}\n".format(os.path.join(root,f)))
+				
+				# now process tags
+				for tag in tags:
+					
+					tag_counter = 0
+					tag_values = []
+					tag_names = []
+					tag_differ = False
+					
+					for t in tags[tag]:
+						if t in keys:
+							tag_counter += 1
+							tag_names.append(t)
+							
+							if tag != "date":
+								if type(metadata[t].raw_value) is str:
+									tag_values.append(metadata[t].raw_value)
+								else:
+									tag_values.append(metadata[t].raw_value[0])
+									
+									if metadata[t].repeatable and len(metadata[t].raw_value) > 1:
+										print(colored("  {} is repeatable and has {} values".format(t, len(metadata[t].raw_value)), "red", attrs=["bold"]))
+										print("\n")
+							else:
+								if not type(metadata[t].value) is datetime.datetime:
+									tag_values.append(metadata[t].value[0])
+								else:
+									tag_values.append(metadata[t].value)
+									
+								
+					if len(tag_values) > 1:
+						print(colored("  multiple tags for {}".format(tag.upper()), "magenta", attrs=["bold"]))
+						print("  {}".format(tag_names))
+						print("\n")
+					
+						# set all datetimes to dates
+						if tag == "date":
+							for i, v in enumerate(tag_values):
+								if type(v) == datetime.datetime:
+									tag_values[i] = v.date()	
+									
+						# has mismatching tag values						
+						if len(set(tag_values)) > 1:
+							tag_differ = True
+								
+						
+					# has mismatching tag values	
+					if tag_differ:	
+						print(colored("  tag mismatch for {}".format(tag.upper()), "red", attrs=["bold"]))
+						print("  ----------------------")
+						for i, t in enumerate(tag_names):
+							print(colored("    {}:".format(t), "yellow", attrs=["bold"]))
+							print("      {}:".format(tag_values[i]))
+						print("  ----------------------")
+						print(colored("    {} tags for {}".format(tag_counter, tag), "red", attrs=["bold"]))
+						print("\n")
+						
+					else:
+						if len(tag_values) > 0:
+							
+							# write IPTC tag if no set
+							if not tags[tag][0] in keys:
+								print(colored("\nsetting {} to {}".format(tags[tag][0], tag_names[0]), "cyan", attrs=["bold"]))
+								print("\n")
+								metadata[tags[tag][0]] = [tag_values[0]]
+								metadata.write()
 
 if __name__ == '__main__':
 	process_args()
@@ -182,7 +265,7 @@ if __name__ == '__main__':
 				original = os.path.join(root, f)
 				target = os.path.join(folder, filename)
 
-				if not ext in extensions:
+				if not ext in EXTENSIONS:
 					sys.stdout.write("\033[1;31m")
 					print("ignore {}".format(original.encode("utf-8", "surrogateescape")))
 				else:
