@@ -292,7 +292,10 @@ def sync_tags(d):
 
 	files_with_errors = []
 	files_with_zerosize_error = []
-	files_with_multitag_error = []
+	files_with_tag_error = []
+	files_with_type_error = []
+	files_with_value_error = []
+	files_with_unicode_error = []
 	
 	print("SYNCING TAGS IN: " + d + " ..")	
 	
@@ -306,105 +309,133 @@ def sync_tags(d):
 			statinfo = os.stat(os.path.join(root,f))
 
 			if statinfo.st_size == 0:
-				error_file.write('{}\n'.format(os.path.join(root,f)))
+				error_file.write('{}: file is zero size\n'.format(os.path.join(root,f)))
 				files_with_errors.append(os.path.join(root,f))
 				files_with_zerosize_error.append(os.path.join(root,f))
 				print("{}".format(os.path.join(root,f)))
 				print(colored("  ERR: file is zero size", "red", attrs=["bold"]))
 				print("\n")
 
-			elif ext in EXTENSIONS:
-				metadata = pyexiv2.ImageMetadata(os.path.join(root,f))
-				metadata.read()
-			
-				# get available keys
-				keys = metadata.iptc_keys
-				for k in metadata.exif_keys:
-					keys.append(k)
-				
-				# debug: print all keys
-				#print("\n{}\n".format(keys))		
-				
-				# now process tags
-				for tag in tags:
+			elif ext in  [".jpg", ".jpeg"]:
+				try:
+					metadata = pyexiv2.ImageMetadata(os.path.join(root,f))
 					
-					tag_counter = 0
-					tag_values = []
-					tag_names = []
-					tag_differ = False
+					metadata.read()
+					if (metadata.iptc_charset == None):
+						metadata.iptc_charset = 'utf-8'
 					
-					for t in tags[tag]:
-						if t in keys:
-							tag_counter += 1
-							tag_names.append(t)
-							
-							if tag != "date":
-								if type(metadata[t].raw_value) is str:
-									tag_values.append(metadata[t].raw_value.strip())
-								else:
-									tag_values.append(metadata[t].raw_value[0].strip())
-									
-									if metadata[t].repeatable and len(metadata[t].raw_value) > 1:
-										if (verbose):
-											print("{}".format(os.path.join(root,f)))
-											print(colored("  {} is repeatable and has {} values".format(t, len(metadata[t].raw_value)), "red", attrs=["bold"]))
-											print("\n")
-							else:
-								if not type(metadata[t].value) is datetime.datetime:
-									tag_values.append(metadata[t].value[0])
-								else:
-									tag_values.append(metadata[t].value)
-									
+					# get available keys
+					keys = metadata.iptc_keys
+					for k in metadata.exif_keys:
+						keys.append(k)
+
+					# now process tags
+					for tag in tags:
+						tag_counter = 0
+						tag_values = []
+						tag_names = []
+						tag_differ = False
+
+						for t in tags[tag]:
+							if t in keys:
+								tag_counter += 1
+								tag_names.append(t)
 								
-					if len(tag_values) > 1:
-						if (verbose):
-							print("{}".format(os.path.join(root,f)))
-							print(colored("  multiple tags for {}".format(tag.upper()), "magenta", attrs=["bold"]))
-							print("  {}".format(tag_names))
-							print("\n")
-					
-						# set all datetimes to dates
-						if tag == "date":
-							for i, v in enumerate(tag_values):
-								if type(v) == datetime.datetime:
-									tag_values[i] = v.date()	
+								if tag != "date":
+									if type(metadata[t].raw_value) is str:
+										if len(metadata[t].raw_value.strip()) > 0:
+											tag_values.append(metadata[t].raw_value.strip())
+									else:
+										if len(metadata[t].raw_value[0].strip()) > 0:
+											tag_values.append(metadata[t].raw_value[0].strip())
+
+										if metadata[t].repeatable and len(metadata[t].raw_value) > 1:
+											if (verbose):
+												print("{}".format(os.path.join(root,f)))
+												print(colored("  {} is repeatable and has {} values".format(t, len(metadata[t].raw_value)), "red", attrs=["bold"]))
+												print("\n")
+								else:
+									if not type(metadata[t].value) is datetime.datetime:
+										tag_values.append(metadata[t].value[0])
+									else:
+										tag_values.append(metadata[t].value)
+
+						if len(tag_values) > 1:
+							if (verbose):
+								print("{}".format(os.path.join(root,f)))
+								print(colored("  multiple tags for {}".format(tag.upper()), "magenta", attrs=["bold"]))
+								print("  {}".format(tag_names))
+								print("\n")
+
+							# set all datetimes to dates
+							if tag == "date":
+								for i, v in enumerate(tag_values):
+									if type(v) == datetime.datetime:
+										tag_values[i] = v.date()
+
+							# has mismatching tag values
+							if len(set(tag_values)) > 1:
+								tag_differ = True
+								error_file.write('{}: multiple tag values for {}\n'.format(os.path.join(root,f), tag.upper()))
+								files_with_errors.append(os.path.join(root,f))
+								files_with_tag_error.append(os.path.join(root,f))
 									
 						# has mismatching tag values
-						if len(set(tag_values)) > 1:
-							tag_differ = True
-							error_file.write('{}\n'.format(os.path.join(root,f)))
-							files_with_errors.append(os.path.join(root,f))
-							files_with_multitag_error.append(os.path.join(root,f))
-								
-					# has mismatching tag values	
-					if tag_differ:	
-						print("{}".format(os.path.join(root,f)))
-						print(colored("  tag mismatch for {}".format(tag.upper()), "red", attrs=["bold"]))
-						print("  ----------------------")
-						for i, t in enumerate(tag_names):
-							print(colored("    {}:".format(t), "yellow", attrs=["bold"]))
-							print("      {}:".format(tag_values[i]))
-						print("  ----------------------")
-						print(colored("   {} mismatching tags for {}".format(tag_counter, tag), "red", attrs=["bold"]))
-						print("\n")
+						if tag_differ:
+							print("{}".format(os.path.join(root,f)))
+							print(colored("  tag mismatch for {}".format(tag.upper()), "red", attrs=["bold"]))
+							print("  ----------------------")
+							for i, t in enumerate(tag_names):
+								print(colored("    {}:".format(t), "yellow", attrs=["bold"]))
+								print("      {}:".format(tag_values[i]))
+							print("  ----------------------")
+							print(colored("   {} mismatching tags for {}".format(tag_counter, tag), "red", attrs=["bold"]))
+							print("\n")
 
-					else:
-						if len(tag_values) > 0:
-							# write IPTC tag if no set
-							if not tags[tag][0] in keys:
-								if (verbose):
-									print("{}".format(os.path.join(root,f)))
-									print(colored("  setting {} to {}".format(tags[tag][0], tag_names[0]), "cyan", attrs=["bold"]))
-									print("\n")
-								metadata[tags[tag][0]] = [tag_values[0]]
-								metadata.write()
-	
+						else:
+							if len(tag_values) > 0:
+								# write IPTC tag if no set
+								if not tags[tag][0] in keys:
+									if (True):
+										print("{}".format(os.path.join(root,f)))
+										print(colored("  setting {} to {}".format(tags[tag][0], tag_names[0]), "cyan", attrs=["bold"]))
+										print("\n")
+									metadata[tags[tag][0]] = [tag_values[0]]
+									metadata.write()
+				except TypeError as err:
+					error_file.write('{}\n'.format(str(err)))
+					files_with_errors.append(os.path.join(root,f))
+					files_with_type_error.append(os.path.join(root,f))
+					print("{}".format(os.path.join(root,f)))
+					print(colored("  ERR: {}".format(str(err)), "red", attrs=["bold"]))
+					print("\n")
+				except pyexiv2.iptc.IptcValueError as err:
+					error_file.write('{}: {}\n'.format(os.path.join(root,f), str(err)))
+					files_with_errors.append(os.path.join(root,f))
+					files_with_value_error.append(os.path.join(root,f))
+					print("{}".format(os.path.join(root,f)))
+					print(colored("  ERR: {}".format(str(err)), "red", attrs=["bold"]))
+					print("\n")
+				except UnicodeDecodeError as err:
+					error_file.write('{}: {}\n'.format(os.path.join(root,f), str(err)))
+					files_with_errors.append(os.path.join(root,f))
+					files_with_unicode_error.append(os.path.join(root,f))
+					print("{}".format(os.path.join(root,f)))
+					print(colored("  ERR: {}".format(str(err)), "red", attrs=["bold"]))
+					print("\n")
+					
 	error_file.close()
-	
+
 	if len(files_with_errors) > 0:	
+		print("found {} file/s with errors".format(len(files_with_errors)))
+		print("-----------------------------------")
 		print("found {} file/s with size zero".format(len(files_with_zerosize_error)))
-		print("found {} file/s with multiple values for matching tags".format(len(files_with_multitag_error)))
-		print("See " + error_file_name + " for a list of these files")
+		print("found {} file/s with type error (apple double?)".format(len(files_with_type_error)))
+		print("found {} file/s with tag mismatch error".format(len(files_with_tag_error)))
+		print("found {} file/s with value error".format(len(files_with_value_error)))
+		print("found {} file/s with unicode error".format(len(files_with_unicode_error)))
+		print("-----------------------------------")
+		print("See " + error_file_name + " for a list of all files with errors")
 	else:
 		os.unlink(error_file_name)
 
