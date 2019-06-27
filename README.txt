@@ -17,22 +17,25 @@ see:
 	fss-tool.py --help
 
 
-EXAMPLES:
-==========
 
+EXAMPLES:
+=========
 
 	Import files from current directory into directory "fx"
-	
-		fss-tool.py --import -o fx
-		
+
+		fss-tool --import -o fx
+
 	Import files from a directory
-	
-		fss-tool.py --import -i /home/data/ritter_archive/
-		
+
+		fss-tool --import -i /home/data/ritter_archive/
+
 	Import
-		fss-tool.py --import -i /home/data/ritter_archive/ -o gr
-		
-	
+		fss-tool --import -i /home/data/ritter_archive/ -o gr
+
+	Sync media structure to pages
+
+		fss-tool --sync-pages
+
 	Sync wiki's page structure for directory "fx"
-	
-		fss-tool.py --sync-pages -i fx
+
+		fss-tool --sync-pages -i fx

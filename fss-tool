@@ -25,23 +25,24 @@ GID = 33
 EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".gif",]
 
 
-dokuwiki = "/var/www/html/farm/fss"
+dokuwiki = "/var/www/html/fss.stwst.at"
 media_dir = "data/media/"
 pages_dir = "data/pages/"
 archive_dir = "foto/archived"
 publish_dir = "foto/published"
 outdir = ""
 indir = "./"
-verbose = True
+verbose = False
 
 syncPages = False
 syncTags = False
 importFiles = False
 
-dir_to_sync = ""
+dir_to_sync = False
 counter = 0
 
 def usage():
+	"""Print Help usage"""
 	print("""
 
 usage: fss-tool [options] -i INPUT-DIR [-o OUTPUT-DIR]
@@ -51,7 +52,7 @@ OPTIONS:
 	-h, --help              print usage
 	-i, --input=DIR         input directory (interpreted depending on action)
 	-o, --output=DIR        output directory (interpreted depending on action)
-
+	-v, --verbose           verbose output
 
 	actions:
 	--import                import into FSS
@@ -60,41 +61,23 @@ OPTIONS:
 
 	fss directories overrides
 
-	--dokuwiki-dir=DIR      DOKUWIKI Directory (default: "/var/www/html/farm/fss/")
-	--archive-dir=DIR       Archive Directory (default: "foto/archived")
-	--publish-dir=DIR       Archive Directory (default: "foto/published")
+	--dokuwiki-dir=DIR      DOKUWIKI Directory (default""" + dokuwiki + """)
+	--archive-dir=DIR       Archive Directory (default: """ + archive_dir + """)
+	--publish-dir=DIR       Archive Directory (default: """ + publish_dir + """)
 
-EXAMPLES:
-=========
-
-	Import files from current directory into directory "fx"
-
-		fss-tool --import -o fx
-
-	Import files from a directory
-
-		fss-tool --import -i /home/data/ritter_archive/
-
-	Import
-		fss-tool --import -i /home/data/ritter_archive/ -o gr
-
-	Sync media structure to pages
-
-		fss-tool --sync-pages
-
-	Sync wiki's page structure for directory "fx"
-
-		fss-tool --sync-pages -i fx
 """)
 
 
 def process_args():
+	"""Process command line arguments"""
+	
 	global indir, outdir, dokuwiki, arrchive_dir, publish_dir
 	global importFiles, syncTags, syncPages
+	global verbose
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "hi:o:",
-			["help", "input=","output=",
+		opts, args = getopt.getopt(sys.argv[1:], "hi:o:v",
+			["help", "input=","output=", "verbose",
 				"import", "sync-pages", "sync-tags",
 				"publish-dir=", "archive-dir=", "dokuwiki-dir=" ])
 	except getopt.GetoptError as err:
@@ -122,6 +105,8 @@ def process_args():
 			syncPages = True
 		elif o in ("--import"):
 			importFiles = True
+		elif o in ("-v", "--verbose"):
+			verbose = True
 		else:
 			usage();
 			sys.exit()
@@ -132,7 +117,154 @@ def process_args():
 		sys.exit(2)
 		
 
+def import_files(indir, outdir):
+	"""Imports files into dokuwikis media structure
+	
+	Keyword arguments:
+    indir -- input directory
+    outdir -- output directory (relative to dokuwikis media folder)
+	"""
+
+	global dokuwiki, arrchive_dir, publish_dir
+
+	if indir[-1:] == "/":
+		top = "./"
+		os.chdir(indir)
+	else:
+		os.chdir(os.path.join(indir,".."))
+		top = os.path.basename(indir)
+
+	target_dir = os.path.join(dokuwiki, media_dir, archive_dir, outdir)
+	
+	print("IMPORTING FILES TO: " + target_dir + " ..")
+	
+	target_list = []
+	
+	for root, subdirs, files in os.walk(top):
+		for f in files:
+			filename, ext = os.path.splitext(f)
+			ext = ext.lower()
+			filename = slugify(filename.lower())
+			
+			dirs = root.split("/")
+			folder = ''
+			for i in range(0, len(dirs)):
+				dirs[i] = slugify(dirs[i].lower())
+				folder = os.path.join(folder, dirs[i])
+		
+			original = os.path.join(root, f)
+			target = os.path.join(folder, filename)
+
+			if not ext in EXTENSIONS:
+				sys.stdout.write("\033[1;31m")
+				if (verbose):
+					print("ignore {}".format(original.encode("utf-8", "surrogateescape")))
+			else:
+				#sys.stdout.write("\033[1;32m")
+				i = 1
+				while target in target_list:
+					i += 1
+					target = target + "-" + str(i)
+
+				target_file = os.path.join(target_dir, target) + ext
+				if (verbose):
+					print("import {} -> {}".format(original, target_file))
+				
+				os.makedirs(os.path.split(target_file)[0], exist_ok=True)
+				os.chown(os.path.split(target_file)[0], UID, GID)
+				copyfile(original, target_file)
+				os.chown(target_file, UID, GID)
+
+				target_list.append(target)
+
+			sys.stdout.write("\033[0;0m")
+
+
+def sync_pages(dir_to_sync):
+	"""Creates dokuwiki page structure and galleries
+	
+	Keyword arguments:
+    indir -- input directory (relative to dokuwikis media folder)
+	"""	
+	
+	if not dir_to_sync:
+		dir_to_sync = os.path.join(archive_dir, indir)
+		
+	print("SYNCING PAGES IN " + dir_to_sync +"..")
+		
+	source_dir = os.path.join(dokuwiki, media_dir, dir_to_sync)
+	target_dir = os.path.join(dokuwiki, pages_dir, dir_to_sync)
+
+	# create sidebar.txt file in top level
+	outfile = os.path.join(target_dir, "sidebar") + ".txt"
+	
+	if (verbose):
+		print("creating file: {}".format(outfile))
+	
+	os.makedirs(os.path.split(outfile)[0], exist_ok=True)
+	f = open(outfile,"w")
+	f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
+
+	for i in os.listdir(source_dir):
+		if os.path.isdir(os.path.join(source_dir, i)) and i[0] != ".":
+			f.write('[[/{}/|{{{{icon>folder}}}}]][[/{}/|{}]]  \n'.format(
+				os.path.join(dir_to_sync,i), os.path.join(dir_to_sync,i), i))
+	f.close()
+	os.chown(outfile, UID, GID)
+	os.chdir(source_dir)
+	for root, subdirs, files in os.walk("."):
+
+		for s in subdirs:
+			if s[0] != ".":
+				d = os.path.join(root, s)
+				outfile = os.path.join(target_dir, d[2:],) + "/start.txt"
+				sidebar = os.path.join(target_dir, d[2:],) + "/sidebar.txt"
+
+				if (verbose):
+					print("creating file: {}".format(sidebar))
+				
+				os.makedirs(os.path.split(sidebar)[0], exist_ok=True)
+				f = open(sidebar,"w")
+				f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
+
+				for i in os.listdir(d):
+					if os.path.isdir(os.path.join(d,i)) and i[0] != ".":
+						f.write(
+							'[[/{}/|{{{{icon>folder}}}}]][[{}/|{}]]  \n'.format(
+							os.path.join(dir_to_sync, d[2:],i),
+							os.path.join(dir_to_sync, d[2:],i), i,
+						))
+				f.close()
+
+				if (verbose):
+					print("creating file: {}".format(outfile))
+					
+				f = open(outfile,"w")
+				f.write("==== {} ====\n".format(s))
+				f.write("{{gallery>?0&150x150&crop&norecursive}}\n")
+				f.close()
+
+				os.chown(outfile, UID, GID)	
+
+
+def repair_tags(f):
+	"""Repair tags of a file - calls exiftools
+
+    Keyword arguments: 
+    f -- input file
+    """
+	call(EXIF_BIN, "-all= -tagsfromfile @ -all:all -unsafe -icc_profile ".format(f))
+
+
 def sync_tags(d):
+	"""Sync tags
+	
+	reads in multiple tag values and collects them into the iptc variant.
+	Logs erros if diverging tag contents are found.
+
+    Keyword arguments: 
+    d -- input directory
+    """
 
 	tags = {
 		"title": [
@@ -161,8 +293,10 @@ def sync_tags(d):
 
 	files_with_errors = []
 	
-	def repair_tags(f):
-		call(EXIF_BIN, "-all= -tagsfromfile @ -all:all -unsafe -icc_profile ".format(f))	
+	print("SYNCING TAGS IN: " + d + " ..")	
+	
+	error_file_name = "synctags_errors.txt"
+	error_file = open(error_file_name, "w")
 
 	for root, subdirs, files in os.walk(d):		
 		for f in files:
@@ -170,21 +304,16 @@ def sync_tags(d):
 			ext = ext.lower()
 
 			if ext in EXTENSIONS:
-
 				metadata = pyexiv2.ImageMetadata(os.path.join(root,f))
 				metadata.read()
-				
-				
-				
+			
 				# get available keys
 				keys = metadata.iptc_keys
 				for k in metadata.exif_keys:
 					keys.append(k)
 				
 				# debug: print all keys
-				#print("\n{}\n".format(keys))
-				
-				
+				#print("\n{}\n".format(keys))		
 				
 				# now process tags
 				for tag in tags:
@@ -206,9 +335,10 @@ def sync_tags(d):
 									tag_values.append(metadata[t].raw_value[0])
 									
 									if metadata[t].repeatable and len(metadata[t].raw_value) > 1:
-										print("{}".format(os.path.join(root,f)))
-										print(colored("  {} is repeatable and has {} values".format(t, len(metadata[t].raw_value)), "red", attrs=["bold"]))
-										print("\n")
+										if (verbose):
+											print("{}".format(os.path.join(root,f)))
+											print(colored("  {} is repeatable and has {} values".format(t, len(metadata[t].raw_value)), "red", attrs=["bold"]))
+											print("\n")
 							else:
 								if not type(metadata[t].value) is datetime.datetime:
 									tag_values.append(metadata[t].value[0])
@@ -232,6 +362,7 @@ def sync_tags(d):
 						# has mismatching tag values						
 						if len(set(tag_values)) > 1:
 							tag_differ = True
+							error_file.write('{}\n'.format(os.path.join(root,f)))
 							files_with_errors.append(os.path.join(root,f))
 								
 					# has mismatching tag values	
@@ -245,12 +376,9 @@ def sync_tags(d):
 						print("  ----------------------")
 						print(colored("   {} mismatching tags for {}".format(tag_counter, tag), "red", attrs=["bold"]))
 						print("\n")
-						
-						
-						
+
 					else:
 						if len(tag_values) > 0:
-							
 							# write IPTC tag if no set
 							if not tags[tag][0] in keys:
 								if (verbose):
@@ -260,143 +388,32 @@ def sync_tags(d):
 								metadata[tags[tag][0]] = [tag_values[0]]
 								metadata.write()
 	
+	error_file.close()
 	
-	if len(files_with_errors) > 0:
-		f = open("errors.txt","w")
-		for name in files_with_errors:
-			f.write('{}\n'.format(name))
-		f.close()
-		
+	if len(files_with_errors) > 0:	
 		print("found {} files with multiple tags with mismatching values".format(len(files_with_errors)))
-		print("See errors.txt for a list of these files")
+		print("See " + error_file_name + " for a list of these files")
+
 
 if __name__ == '__main__':
 	process_args()
 
-
 	if importFiles:
-	
-		if indir[-1:] == "/":
-			top = "./"
-			os.chdir(indir)
-		else:
-			os.chdir(os.path.join(indir,".."))
-			top = os.path.basename(indir)
-
+		cwd = os.getcwd()
 		
-		target_dir = os.path.join(dokuwiki, media_dir, archive_dir, outdir)
-		target_list = []
+		import_files(indir, outdir)
 		
-		print(target_dir)
-
-		for root, subdirs, files in os.walk(top):
-			for f in files:
-				filename, ext = os.path.splitext(f)
-				ext = ext.lower()
-				filename = slugify(filename.lower())
-				
-				dirs = root.split("/")
-				folder = ''
-				for i in range(0, len(dirs)):
-					dirs[i] = slugify(dirs[i].lower())
-					folder = os.path.join(folder, dirs[i])
-			
-				original = os.path.join(root, f)
-				target = os.path.join(folder, filename)
-
-				if not ext in EXTENSIONS:
-					sys.stdout.write("\033[1;31m")
-					print("ignore {}".format(original.encode("utf-8", "surrogateescape")))
-				else:
-					#sys.stdout.write("\033[1;32m")
-					i = 1
-					while target in target_list:
-						i += 1
-						target = target + "-" + str(i)
-
-					target_file = os.path.join(target_dir, target) + ext
-					print("import {} -> {}".format(original, target_file))
-					
-					os.makedirs(os.path.split(target_file)[0], exist_ok=True)
-					os.chown(os.path.split(target_file)[0], UID, GID)
-					copyfile(original, target_file)
-					os.chown(target_file, UID, GID)
-
-					target_list.append(target)
-
-				sys.stdout.write("\033[0;0m")
-
-		dir_to_sync = os.path.join(archive_dir, outdir)
-		syncPages = True
-
-
-	if syncPages:
-		if not dir_to_sync:
-			dir_to_sync = os.path.join(archive_dir, indir)
-
-		source_dir = os.path.join(dokuwiki, media_dir, dir_to_sync)
-		target_dir = os.path.join(dokuwiki, pages_dir, dir_to_sync)
-
-		# create sidebar.txt one level up
-		#outfile = os.path.join(target_dir, "..","sidebar") + ".txt"
-		##print("creating file: {}".format(outfile))
-		#os.makedirs(os.path.split(outfile)[0], exist_ok=True)
-		#f = open(outfile,"w")
-		#f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
-
-		##for i in os.listdir(os.path.join(source_dir, "..")):
-		#	if os.path.isdir(os.path.join(source_dir, "..", i)) and i[0] != ".":
-		#		f.write('[[/{}/|{{{{icon>folder}}}}]][[/{}/|{}]]  \n'.format(
-		#			os.path.join(dir_to_sync,"..", i), os.path.join(dir_to_sync, "..", i), i))
-		#f.close()
-		#os.chown(outfile, UID, GID)
+		os.chdir(cwd)
+		target_dir = os.path.join(archive_dir, outdir)
+		(head,tail) = os.path.split(target_dir)
+		sync_pages(head)
 		
-		# create sidebar.txt file in top level
-		outfile = os.path.join(target_dir, "sidebar") + ".txt"
-		print("creating file: {}".format(outfile))
-		os.makedirs(os.path.split(outfile)[0], exist_ok=True)
-		f = open(outfile,"w")
-		f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
-
-		for i in os.listdir(source_dir):
-			if os.path.isdir(os.path.join(source_dir, i)) and i[0] != ".":
-				f.write('[[/{}/|{{{{icon>folder}}}}]][[/{}/|{}]]  \n'.format(
-					os.path.join(dir_to_sync,i), os.path.join(dir_to_sync,i), i))
-		f.close()
-		os.chown(outfile, UID, GID)
-
-
-		os.chdir(source_dir)
-		for root, subdirs, files in os.walk("."):
-
-			for s in subdirs:
-				if s[0] != ".":
-					d = os.path.join(root, s)
-					outfile = os.path.join(target_dir, d[2:],) + "/start.txt"
-					sidebar = os.path.join(target_dir, d[2:],) + "/sidebar.txt"
-
-
-					print("creating file: {}".format(sidebar))
-					os.makedirs(os.path.split(sidebar)[0], exist_ok=True)
-					f = open(sidebar,"w")
-					f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
-
-					for i in os.listdir(d):
-						if os.path.isdir(os.path.join(d,i)) and i[0] != ".":
-							f.write(
-								'[[/{}/|{{{{icon>folder}}}}]][[{}/|{}]]  \n'.format(
-								os.path.join(dir_to_sync, d[2:],i),
-								os.path.join(dir_to_sync, d[2:],i), i,
-							))
-					f.close()
-
-					print("creating file: {}".format(outfile))
-					f = open(outfile,"w")
-					f.write("==== {} ====\n".format(s))
-					f.write("{{gallery>?0&150x150&crop&norecursive}}\n")
-					f.close()
-
-					os.chown(outfile, UID, GID)
-					
-	if syncTags:
+		os.chdir(cwd)
+		target_dir = os.path.join(dokuwiki, media_dir, target_dir)
+		sync_tags(target_dir)
+		
+	elif syncPages:
+		sync_pages(dir_to_sync)
+		
+	elif syncTags:
 		sync_tags(indir)
