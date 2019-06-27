@@ -291,6 +291,8 @@ def sync_tags(d):
 	}
 
 	files_with_errors = []
+	files_with_zerosize_error = []
+	files_with_multitag_error = []
 	
 	print("SYNCING TAGS IN: " + d + " ..")	
 	
@@ -304,6 +306,9 @@ def sync_tags(d):
 			statinfo = os.stat(os.path.join(root,f))
 
 			if statinfo.st_size == 0:
+				error_file.write('{}\n'.format(os.path.join(root,f)))
+				files_with_errors.append(os.path.join(root,f))
+				files_with_zerosize_error.append(os.path.join(root,f))
 				print("{}".format(os.path.join(root,f)))
 				print(colored("  ERR: file is zero size", "red", attrs=["bold"]))
 				print("\n")
@@ -369,6 +374,7 @@ def sync_tags(d):
 							tag_differ = True
 							error_file.write('{}\n'.format(os.path.join(root,f)))
 							files_with_errors.append(os.path.join(root,f))
+							files_with_multitag_error.append(os.path.join(root,f))
 								
 					# has mismatching tag values	
 					if tag_differ:	
@@ -396,8 +402,11 @@ def sync_tags(d):
 	error_file.close()
 	
 	if len(files_with_errors) > 0:	
-		print("found {} files with multiple tags with mismatching values".format(len(files_with_errors)))
+		print("found {} file/s with size zero".format(len(files_with_zerosize_error)))
+		print("found {} file/s with multiple values for matching tags".format(len(files_with_multitag_error)))
 		print("See " + error_file_name + " for a list of these files")
+	else:
+		os.unlink(error_file_name)
 
 
 if __name__ == '__main__':
