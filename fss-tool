@@ -154,13 +154,14 @@ def import_files(indir, outdir):
 		
 			original = os.path.join(root, f)
 			target = os.path.join(folder, filename)
+			statinfo = os.stat(original)
 
 			if not ext in EXTENSIONS:
-				sys.stdout.write("\033[1;31m")
 				if (verbose):
-					print("ignore {}".format(original.encode("utf-8", "surrogateescape")))
+					print(colored("ignore {}".format(original.encode("utf-8", "surrogateescape")), "yellow", attrs=["bold"]))
+			elif statinfo.st_size == 0:
+				print(colored("ERR: file is zero size - don't copy: {}".format(original), "red", attrs=["bold"]))
 			else:
-				#sys.stdout.write("\033[1;32m")
 				i = 1
 				while target in target_list:
 					i += 1
@@ -176,8 +177,6 @@ def import_files(indir, outdir):
 				os.chown(target_file, UID, GID)
 
 				target_list.append(target)
-
-			sys.stdout.write("\033[0;0m")
 
 
 def sync_pages(dir_to_sync):
@@ -302,8 +301,14 @@ def sync_tags(d):
 		for f in files:
 			filename, ext = os.path.splitext(f)
 			ext = ext.lower()
+			statinfo = os.stat(os.path.join(root,f))
 
-			if ext in EXTENSIONS:
+			if statinfo.st_size == 0:
+				print("{}".format(os.path.join(root,f)))
+				print(colored("  ERR: file is zero size", "red", attrs=["bold"]))
+				print("\n")
+
+			elif ext in EXTENSIONS:
 				metadata = pyexiv2.ImageMetadata(os.path.join(root,f))
 				metadata.read()
 			
