@@ -37,6 +37,7 @@ verbose = False
 syncPages = False
 syncTags = False
 importFiles = False
+importOnly = False
 
 dir_to_sync = False
 counter = 0
@@ -55,7 +56,8 @@ OPTIONS:
 	-v, --verbose           verbose output
 
 	actions:
-	--import                import into FSS
+	--import                import into FSS (additionally run sync pages and sync tags on import)
+	--import-only           import into FSS (only import)
 	--sync-pages            sync dokuwiki's page structure to image files
 	--sync-tags             NOT YET: sync exif/iptc/xmp tags
 
@@ -72,13 +74,13 @@ def process_args():
 	"""Process command line arguments"""
 	
 	global indir, outdir, dokuwiki, arrchive_dir, publish_dir
-	global importFiles, syncTags, syncPages
+	global importFiles, importOnly, syncTags, syncPages
 	global verbose
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], "hi:o:v",
 			["help", "input=","output=", "verbose",
-				"import", "sync-pages", "sync-tags",
+				"import", "import-only", "sync-pages", "sync-tags",
 				"publish-dir=", "archive-dir=", "dokuwiki-dir=" ])
 	except getopt.GetoptError as err:
 		print(str(err)) # will print something like "option -a not recognized"
@@ -105,6 +107,9 @@ def process_args():
 			syncPages = True
 		elif o in ("--import"):
 			importFiles = True
+		elif o in ("--import-only"):
+			importFiles = True
+			importOnly = True
 		elif o in ("-v", "--verbose"):
 			verbose = True
 		else:
@@ -159,24 +164,37 @@ def import_files(indir, outdir):
 			if not ext in EXTENSIONS:
 				if (verbose):
 					print(colored("ignore {}".format(original.encode("utf-8", "surrogateescape")), "yellow", attrs=["bold"]))
-			elif statinfo.st_size == 0:
-				print(colored("ERR: file is zero size - don't copy: {}".format(original), "red", attrs=["bold"]))
+			#elif statinfo.st_size == 0:
+			#	print(colored("ERR: {}: file is zero size - don't copy".format(original), "red", attrs=["bold"]))
 			else:
-				i = 1
-				while target in target_list:
-					i += 1
-					target = target + "-" + str(i)
+				try:
+					# try reading metada - if it fails consider image invalid, don't import
+					#metadata = pyexiv2.ImageMetadata(original)
+					#metadata.read()
 
-				target_file = os.path.join(target_dir, target) + ext
-				if (verbose):
-					print("import {} -> {}".format(original, target_file))
-				
-				os.makedirs(os.path.split(target_file)[0], exist_ok=True)
-				os.chown(os.path.split(target_file)[0], UID, GID)
-				copyfile(original, target_file)
-				os.chown(target_file, UID, GID)
+					# verfiy it is an image
+					from PIL import Image
+					im = Image.open(original)
 
-				target_list.append(target)
+					i = 1
+					while target in target_list:
+						i += 1
+						target = target + "-" + str(i)
+
+					target_file = os.path.join(target_dir, target) + ext
+					if (verbose):
+						print("import {} -> {}".format(original, target_file))
+
+					os.makedirs(os.path.split(target_file)[0], exist_ok=True)
+					os.chown(os.path.split(target_file)[0], UID, GID)
+					copyfile(original, target_file)
+					os.chown(target_file, UID, GID)
+
+					target_list.append(target)		
+				except TypeError as err:
+					print(colored("ERR: {} - don't copy".format(str(err)), "red", attrs=["bold"]))
+				except OSError as err:
+					print(colored("ERR: {} - is not a valid image file, don't copy".format(str(err)), "red", attrs=["bold"]))
 
 
 def sync_pages(dir_to_sync):
@@ -447,15 +465,16 @@ if __name__ == '__main__':
 		cwd = os.getcwd()
 		
 		import_files(indir, outdir)
-		
 		os.chdir(cwd)
-		target_dir = os.path.join(archive_dir, outdir)
-		(head,tail) = os.path.split(target_dir)
-		sync_pages(head)
 		
-		os.chdir(cwd)
-		target_dir = os.path.join(dokuwiki, media_dir, target_dir)
-		sync_tags(target_dir)
+		if not importOnly:
+			target_dir = os.path.join(archive_dir, outdir)
+			(head,tail) = os.path.split(target_dir)
+			sync_pages(head)
+
+			os.chdir(cwd)
+			target_dir = os.path.join(dokuwiki, media_dir, target_dir)
+			sync_tags(target_dir)
 		
 	elif syncPages:
 		sync_pages(dir_to_sync)
