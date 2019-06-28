@@ -167,6 +167,7 @@ def import_files(indir, outdir):
 			#elif statinfo.st_size == 0:
 			#	print(colored("ERR: {}: file is zero size - don't copy".format(original), "red", attrs=["bold"]))
 			else:
+				image_valid = True
 				try:
 					# try reading metada - if it fails consider image invalid, don't import
 					#metadata = pyexiv2.ImageMetadata(original)
@@ -176,6 +177,11 @@ def import_files(indir, outdir):
 					from PIL import Image
 					im = Image.open(original)
 
+				except OSError as err:
+					print(colored("ERR: {} - is not a valid image file, don't copy".format(str(err)), "red", attrs=["bold"]))
+					image_valid = False
+
+				if image_valid:
 					i = 1
 					while target in target_list:
 						i += 1
@@ -191,10 +197,6 @@ def import_files(indir, outdir):
 					os.chown(target_file, UID, GID)
 
 					target_list.append(target)		
-				except TypeError as err:
-					print(colored("ERR: {} - don't copy".format(str(err)), "red", attrs=["bold"]))
-				except OSError as err:
-					print(colored("ERR: {} - is not a valid image file, don't copy".format(str(err)), "red", attrs=["bold"]))
 
 
 def sync_pages(dir_to_sync):
