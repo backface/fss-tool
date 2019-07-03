@@ -11,7 +11,7 @@ see: http://www.gnu.org/licenses/gpl.html
 import sys
 import os
 import getopt
-import datetime
+import datetime, time
 from shutil import copyfile
 from slugify import slugify
 import pyexiv2
@@ -33,11 +33,12 @@ publish_dir = "foto/published"
 outdir = ""
 indir = "./"
 verbose = False
-
+recursive = False
 syncPages = False
 syncTags = False
 importFiles = False
 importOnly = False
+lightbox = False
 
 dir_to_sync = False
 counter = 0
@@ -53,7 +54,11 @@ OPTIONS:
 	-h, --help              print usage
 	-i, --input=DIR         input directory (interpreted depending on action)
 	-o, --output=DIR        output directory (interpreted depending on action)
-	-v, --verbose           verbose output
+	-v, -lightbox-verbose           verbose output
+	
+	
+	-r, --recursive			recursive flag for sync-pages gallery
+	-l, --lightbox          lightbox for gallery plugin
 
 	actions:
 	--import                import into FSS (additionally run sync pages and sync tags on import)
@@ -73,13 +78,13 @@ OPTIONS:
 def process_args():
 	"""Process command line arguments"""
 	
-	global indir, outdir, dokuwiki, arrchive_dir, publish_dir
+	global indir, outdir, dokuwiki, archive_dir, publish_dir
 	global importFiles, importOnly, syncTags, syncPages
-	global verbose
+	global verbose, recursive, lightbox
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:], "hi:o:v",
-			["help", "input=","output=", "verbose",
+		opts, args = getopt.getopt(sys.argv[1:], "hi:o:vrl",
+			["help", "input=","output=", "verbose", "recursive", "lightbox"
 				"import", "import-only", "sync-pages", "sync-tags",
 				"publish-dir=", "archive-dir=", "dokuwiki-dir=" ])
 	except getopt.GetoptError as err:
@@ -112,6 +117,10 @@ def process_args():
 			importOnly = True
 		elif o in ("-v", "--verbose"):
 			verbose = True
+		elif o in ("-r", "--recursive"):
+			recursive = True			
+		elif o in ("-l", "--lightbox"):
+			lightbox = True
 		else:
 			usage();
 			sys.exit()
@@ -224,7 +233,7 @@ def sync_pages(dir_to_sync):
 	f = open(outfile,"w")
 	f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
 
-	for i in os.listdir(source_dir):
+	for i in sorted(os.listdir(source_dir)):
 		if os.path.isdir(os.path.join(source_dir, i)) and i[0] != ".":
 			f.write('[[/{}/|{{{{icon>folder}}}}]][[/{}/|{}]]  \n'.format(
 				os.path.join(dir_to_sync,i), os.path.join(dir_to_sync,i), i))
@@ -246,7 +255,7 @@ def sync_pages(dir_to_sync):
 				f = open(sidebar,"w")
 				f.write("[[../|{{icon>level-up}}]][[../|..]]\n")
 
-				for i in os.listdir(d):
+				for i in sorted(os.listdir(d)):
 					if os.path.isdir(os.path.join(d,i)) and i[0] != ".":
 						f.write(
 							'[[/{}/|{{{{icon>folder}}}}]][[{}/|{}]]  \n'.format(
@@ -260,9 +269,19 @@ def sync_pages(dir_to_sync):
 					
 				f = open(outfile,"w")
 				f.write("==== {} ====\n".format(s))
-				f.write("{{gallery>?0&150x150&crop&norecursive}}\n")
+				
+				if lightbox:
+					l = "&lightbox"
+				else:
+					l = ""
+					
+				if not recursive:
+					f.write("{{{{gallery>?0&150x150&crop&norecursive{}&t={}}}}}\n".format(l, time.time()))
+				else:
+					f.write("{{{{gallery>?0&150x150&crop&recursive{}&t={}}}}}\n".format(l, time.time()))
 				f.close()
 
+				os.touch(outfile)
 				os.chown(outfile, UID, GID)	
 
 
